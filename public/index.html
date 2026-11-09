@@ -161,6 +161,25 @@
               />
             </div>
 
+            <!-- Barra de Progreso de Subida -->
+            <div id="uploadProgressContainer" class="hidden space-y-1.5">
+              <div class="flex justify-between text-xs text-slate-400">
+                <span id="progressStatusText">Subiendo...</span>
+                <span id="progressPercent" class="font-mono text-brand-400"
+                  >0%</span
+                >
+              </div>
+              <div
+                class="w-full bg-slate-950 rounded-full h-2.5 border border-slate-800 overflow-hidden"
+              >
+                <div
+                  id="progressBar"
+                  class="bg-brand-600 h-full transition-all duration-150"
+                  style="width: 0%"
+                ></div>
+              </div>
+            </div>
+
             <button
               type="submit"
               id="uploadBtn"
@@ -292,6 +311,13 @@
       const timeField = document.getElementById("timeField");
       const downloadsField = document.getElementById("downloadsField");
 
+      const uploadProgressContainer = document.getElementById(
+        "uploadProgressContainer",
+      );
+      const progressBar = document.getElementById("progressBar");
+      const progressPercent = document.getElementById("progressPercent");
+      const progressStatusText = document.getElementById("progressStatusText");
+
       expiryModeSelect.addEventListener("change", (e) => {
         const val = e.target.value;
         timeField.classList.toggle("hidden", val !== "time" && val !== "both");
@@ -324,7 +350,8 @@
         if (!isUpload) loadFilesData();
       }
 
-      uploadForm.addEventListener("submit", async (e) => {
+      // Subida con XMLHttpRequest para barra de progreso real
+      uploadForm.addEventListener("submit", (e) => {
         e.preventDefault();
         if (!fileInput.files[0]) return;
 
@@ -345,28 +372,51 @@
         );
 
         uploadBtn.disabled = true;
-        uploadBtn.textContent = "Subiendo y fragmentando...";
+        uploadProgressContainer.classList.remove("hidden");
+        progressBar.style.width = "0%";
+        progressPercent.textContent = "0%";
+        progressStatusText.textContent = "Subiendo y fragmentando...";
 
-        try {
-          const res = await fetch("/api/upload", {
-            method: "POST",
-            body: formData,
-          });
-          const data = await res.json();
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/upload", true);
 
-          if (res.ok && data.success) {
-            uploadPlaceholder.classList.add("hidden");
-            uploadResult.classList.remove("hidden");
-            generatedLink.value = `${window.location.origin}/${data.slug}`;
-          } else {
-            alert(data.error || "Error al subir");
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = Math.round(
+              (event.loaded / event.total) * 100,
+            );
+            progressBar.style.width = percentComplete + "%";
+            progressPercent.textContent = percentComplete + "%";
+            if (percentComplete === 100) {
+              progressStatusText.textContent = "Procesando en servidor...";
+            }
           }
-        } catch (err) {
-          alert("Error de conexión");
-        } finally {
+        };
+
+        xhr.onload = () => {
           uploadBtn.disabled = false;
-          uploadBtn.textContent = "Subir y Generar URL";
-        }
+          uploadProgressContainer.classList.add("hidden");
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status === 200 && data.success) {
+              uploadPlaceholder.classList.add("hidden");
+              uploadResult.classList.remove("hidden");
+              generatedLink.value = `${window.location.origin}/${data.slug}`;
+            } else {
+              alert(data.error || "Error al subir");
+            }
+          } catch {
+            alert("Error en la respuesta del servidor");
+          }
+        };
+
+        xhr.onerror = () => {
+          uploadBtn.disabled = false;
+          uploadProgressContainer.classList.add("hidden");
+          alert("Error de red al intentar subir el archivo.");
+        };
+
+        xhr.send(formData);
       });
 
       copyBtn.addEventListener("click", () => {
