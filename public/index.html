@@ -514,12 +514,45 @@
           tbody.innerHTML = data.files
             .map((f) => {
               const sizeMB = (f.totalSize / (1024 * 1024)).toFixed(2) + " MB";
+
+              // Calcular política y tiempo restante detallado para la tabla
+              let policyText =
+                '<span class="text-emerald-400">Permanente</span>';
+
+              if (f.expiryMode === "time" || f.expiryMode === "both") {
+                if (f.expiresAt) {
+                  const diffMs = new Date(f.expiresAt) - new Date();
+                  if (diffMs > 0) {
+                    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                    const diffMins = Math.floor(
+                      (diffMs % (1000 * 60 * 60)) / (1000 * 60),
+                    );
+                    policyText = `⏱️ Expira en ${diffHours}h ${diffMins}m`;
+                  } else {
+                    policyText = '<span class="text-rose-400">Expirado</span>';
+                  }
+                }
+              }
+
+              if (f.expiryMode === "downloads" || f.expiryMode === "both") {
+                const left =
+                  f.maxDownloads !== null
+                    ? f.maxDownloads - f.currentDownloads
+                    : "∞";
+                const dlText = `📥 Quedan ${left}/${f.maxDownloads}`;
+                policyText =
+                  f.expiryMode === "both"
+                    ? `${policyText} | ${dlText}`
+                    : dlText;
+              }
+
               return `
                         <tr class="hover:bg-slate-800/30 transition-all">
                             <td class="p-3 font-medium text-slate-200 truncate max-w-[120px]">${f.originalName}</td>
                             <td class="p-3 font-mono text-brand-400"><a href="#" onclick="downloadWithProgress('${f.slug}', '${encodeURIComponent(f.originalName)}'); return false;" class="hover:underline">/${f.slug}</a></td>
                             <td class="p-3 text-slate-400">${sizeMB}</td>
                             <td class="p-3 text-slate-300">${f.currentDownloads} ${f.maxDownloads !== null ? "/ " + f.maxDownloads : ""}</td>
+                            <td class="p-3 text-slate-400">${policyText}</td>
                             <td class="p-3 text-right">
                                 <button onclick="deleteFile('${f.slug}')" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded-xl border border-rose-500/20 transition-all active:scale-95">Eliminar</button>
                             </td>
