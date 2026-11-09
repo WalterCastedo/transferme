@@ -186,7 +186,7 @@ app.delete('/api/files/:slug', async (req, res) => {
 });
 
 // 4. Ruta GET /:slug -> Vista previa interactiva
-// 4. Ruta GET /:slug -> Vista previa interactiva con barra de porcentaje en tiempo real
+// 4. Ruta GET /:slug -> Vista previa interactiva con barra de porcentaje y tiempos/descargas restantes
 app.get('/:slug', async (req, res, next) => {
   const { slug } = req.params;
   if (slug === 'api' || slug.includes('.')) return next();
@@ -196,6 +196,7 @@ app.get('/:slug', async (req, res, next) => {
     return res.status(404).send(renderErrorPage('Archivo no encontrado', 'El enlace que buscas no existe o fue eliminado.'));
   }
 
+  // Validaciones de expiración
   if (fileRecord.expiresAt && new Date() > new Date(fileRecord.expiresAt)) {
     return res.status(410).send(renderErrorPage('Archivo Expirado', 'Este archivo ha superado su tiempo límite de disponibilidad.'));
   }
@@ -205,7 +206,26 @@ app.get('/:slug', async (req, res, next) => {
   }
 
   const sizeMB = (fileRecord.totalSize / (1024 * 1024)).toFixed(2);
-  const remainingDownloads = fileRecord.maxDownloads !== null ? (fileRecord.maxDownloads - fileRecord.currentDownloads) : 'Ilimitadas';
+
+  // Calcular tiempo restante si aplica
+  let remainingTimeText = null;
+  if (fileRecord.expiresAt) {
+    const diffMs = new Date(fileRecord.expiresAt) - new Date();
+    if (diffMs > 0) {
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      remainingTimeText = diffHours > 0 ? `${diffHours}h ${diffMins}m` : `${diffMins} minutos`;
+    } else {
+      remainingTimeText = 'Expirado';
+    }
+  }
+
+  // Calcular descargas restantes si aplica
+  let remainingDownloadsText = 'Ilimitadas';
+  if (fileRecord.maxDownloads !== null) {
+    const left = fileRecord.maxDownloads - fileRecord.currentDownloads;
+    remainingDownloadsText = `${left > 0 ? left : 0} de ${fileRecord.maxDownloads}`;
+  }
 
   res.send(`<!DOCTYPE html>
 <html lang="es" class="dark">
@@ -229,7 +249,9 @@ app.get('/:slug', async (req, res, next) => {
         
         <div class="bg-slate-950/80 rounded-2xl p-4 text-left space-y-2 text-xs text-slate-300 border border-slate-800/80">
             <div class="flex justify-between"><span>Tamaño:</span> <span class="font-mono text-white">${sizeMB} MB</span></div>
-            <div class="flex justify-between"><span>Descargas Restantes:</span> <span class="font-mono text-white">${remainingDownloads}</span></div>
+            ${fileRecord.maxDownloads !== null ? `<div class="flex justify-between"><span>Descargas Restantes:</span> <span class="font-mono text-white">${remainingDownloadsText}</span></div>` : ''}
+            ${fileRecord.expiresAt ? `<div class="flex justify-between"><span>Tiempo Restante:</span> <span class="font-mono text-white">${remainingTimeText}</span></div>` : ''}
+            ${fileRecord.expiryMode === 'permanent' ? `<div class="flex justify-between"><span>Tipo:</span> <span class="text-white">Permanente</span></div>` : ''}
         </div>
 
         <!-- Barra de progreso de descarga en tiempo real -->
