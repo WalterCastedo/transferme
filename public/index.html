@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="es" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TransferMe - Gestión Avanzada de Archivos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: "#eef2ff",
+                500: "#6366f1",
+                600: "#4f46e5",
+                700: "#4338ca",
+              },
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body
+    class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-brand-500 selection:text-white"
+  >
+    <header
+      class="border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50"
+    >
+      <div
+        class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between"
+      >
+        <div class="flex items-center space-x-3">
+          <div
+            class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-400 flex items-center justify-center shadow-lg shadow-brand-500/30"
+          >
+            <svg
+              class="w-6 h-6 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+          </div>
+          <span
+            class="font-bold text-xl tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent"
+            >TransferMe</span
+          >
+        </div>
+
+        <nav
+          class="flex space-x-2 bg-slate-950/60 p-1 rounded-xl border border-slate-800"
+        >
+          <button
+            onclick="switchTab('upload')"
+            id="tab-upload"
+            class="px-4 py-1.5 rounded-lg text-xs font-medium bg-brand-600 text-white transition-all"
+          >
+            Subir y Compartir
+          </button>
+          <button
+            onclick="switchTab('manage')"
+            id="tab-manage"
+            class="px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all"
+          >
+            Mis Archivos & Almacenamiento
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-6 py-10 flex-1 w-full">
+      <!-- SECCIÓN 1: SUBIR -->
+      <div
+        id="section-upload"
+        class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start"
+      >
+        <div
+          class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-2xl backdrop-blur-xl"
+        >
+          <h2 class="text-lg font-semibold text-white mb-1">Nuevo Archivo</h2>
+          <p class="text-sm text-slate-400 mb-6">
+            Sube archivos sin límite mediante fragmentación.
+          </p>
+
+          <form id="uploadForm" class="space-y-4">
+            <div
+              id="dropZone"
+              class="border-2 border-dashed border-slate-700 hover:border-brand-500/80 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-950/40 relative"
+            >
+              <input
+                type="file"
+                id="fileInput"
+                class="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                required
+              />
+              <p class="text-sm font-medium text-slate-300" id="fileNameLabel">
+                Arrastra tu archivo o
+                <span class="text-brand-400">explora</span>
+              </p>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1"
+                >URL Personalizada (Opcional)</label
+              >
+              <input
+                type="text"
+                id="customSlug"
+                placeholder="ej: mi-recurso"
+                class="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:border-brand-500 outline-none font-mono"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1"
+                >Política de Disponibilidad</label
+              >
+              <select
+                id="expiryMode"
+                class="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
+              >
+                <option value="permanent">Permanente (Sin límite)</option>
+                <option value="time">Por Tiempo (Horas)</option>
+                <option value="downloads">Por Cantidad de Descargas</option>
+                <option value="both">Por Tiempo y Cantidad</option>
+              </select>
+            </div>
+
+            <div id="timeField" class="hidden">
+              <label class="block text-xs font-medium text-slate-400 mb-1"
+                >Expira en (Horas)</label
+              >
+              <input
+                type="number"
+                id="expiresInHours"
+                value="24"
+                min="1"
+                class="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
+              />
+            </div>
+
+            <div id="downloadsField" class="hidden">
+              <label class="block text-xs font-medium text-slate-400 mb-1"
+                >Cantidad Máxima de Descargas</label
+              >
+              <input
+                type="number"
+                id="maxDownloads"
+                value="5"
+                min="1"
+                class="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
+              />
+            </div>
+
+            <button
+              type="submit"
+              id="uploadBtn"
+              class="w-full py-3 px-4 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-xl shadow-lg transition-all text-sm"
+            >
+              Subir y Generar URL
+            </button>
+          </form>
+        </div>
+
+        <div
+          class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-2xl backdrop-blur-xl flex flex-col justify-center"
+        >
+          <div id="uploadResult" class="hidden text-center space-y-4">
+            <div
+              class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-xl"
+            >
+              ✓
+            </div>
+            <h3 class="text-base font-semibold text-white">¡Archivo listo!</h3>
+            <p class="text-xs text-slate-400">
+              Comparte este enlace de vista previa:
+            </p>
+            <div class="flex items-center gap-2">
+              <input
+                type="text"
+                id="generatedLink"
+                readonly
+                class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-brand-300 w-full select-all font-mono"
+              />
+              <button
+                id="copyBtn"
+                class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-xs font-medium"
+              >
+                Copiar
+              </button>
+            </div>
+          </div>
+          <div
+            id="uploadPlaceholder"
+            class="text-center text-slate-500 text-sm py-12"
+          >
+            Sube un archivo para ver su enlace personalizado aquí.
+          </div>
+        </div>
+      </div>
+
+      <!-- SECCIÓN 2: GESTIÓN -->
+      <div id="section-manage" class="hidden space-y-6">
+        <div
+          class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl"
+        >
+          <div class="flex justify-between text-sm mb-2">
+            <span class="font-medium text-slate-300"
+              >Almacenamiento Utilizado</span
+            >
+            <span id="storageText" class="text-brand-400 font-mono text-xs"
+              >0 MB / 1024 MB</span
+            >
+          </div>
+          <div
+            class="w-full bg-slate-950 rounded-full h-3 border border-slate-800 overflow-hidden"
+          >
+            <div
+              id="storageBar"
+              class="bg-brand-600 h-full transition-all duration-500"
+              style="width: 0%"
+            ></div>
+          </div>
+        </div>
+
+        <div
+          class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl"
+        >
+          <div
+            class="p-4 border-b border-slate-800 flex justify-between items-center"
+          >
+            <h3 class="font-semibold text-white text-sm">Archivos Subidos</h3>
+            <button
+              onclick="loadFilesData()"
+              class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition-all"
+            >
+              Actualizar Lista
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead
+                class="bg-slate-950/60 text-slate-400 border-b border-slate-800"
+              >
+                <tr>
+                  <th class="p-3">Nombre</th>
+                  <th class="p-3">URL</th>
+                  <th class="p-3">Tamaño</th>
+                  <th class="p-3">Descargas</th>
+                  <th class="p-3">Política</th>
+                  <th class="p-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="filesTableBody" class="divide-y divide-slate-800/60">
+                <tr>
+                  <td colspan="6" class="p-6 text-center text-slate-500">
+                    Cargando archivos...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer
+      class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500"
+    >
+      TransferMe Engine &bull; Optimizado para Supabase Free Tier
+    </footer>
+
+    <script>
+      const fileInput = document.getElementById("fileInput");
+      const fileNameLabel = document.getElementById("fileNameLabel");
+      const uploadForm = document.getElementById("uploadForm");
+      const uploadBtn = document.getElementById("uploadBtn");
+      const uploadResult = document.getElementById("uploadResult");
+      const uploadPlaceholder = document.getElementById("uploadPlaceholder");
+      const generatedLink = document.getElementById("generatedLink");
+      const copyBtn = document.getElementById("copyBtn");
+      const expiryModeSelect = document.getElementById("expiryMode");
+      const timeField = document.getElementById("timeField");
+      const downloadsField = document.getElementById("downloadsField");
+
+      expiryModeSelect.addEventListener("change", (e) => {
+        const val = e.target.value;
+        timeField.classList.toggle("hidden", val !== "time" && val !== "both");
+        downloadsField.classList.toggle(
+          "hidden",
+          val !== "downloads" && val !== "both",
+        );
+      });
+
+      fileInput.addEventListener("change", (e) => {
+        if (e.target.files.length > 0) {
+          fileNameLabel.innerHTML = `Seleccionado: <strong class="text-white">${e.target.files[0].name}</strong>`;
+        }
+      });
+
+      function switchTab(tab) {
+        const isUpload = tab === "upload";
+        document
+          .getElementById("section-upload")
+          .classList.toggle("hidden", !isUpload);
+        document
+          .getElementById("section-manage")
+          .classList.toggle("hidden", isUpload);
+        document.getElementById("tab-upload").className = isUpload
+          ? "px-4 py-1.5 rounded-lg text-xs font-medium bg-brand-600 text-white transition-all"
+          : "px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all";
+        document.getElementById("tab-manage").className = !isUpload
+          ? "px-4 py-1.5 rounded-lg text-xs font-medium bg-brand-600 text-white transition-all"
+          : "px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all";
+        if (!isUpload) loadFilesData();
+      }
+
+      uploadForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!fileInput.files[0]) return;
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+        formData.append(
+          "customSlug",
+          document.getElementById("customSlug").value,
+        );
+        formData.append("expiryMode", expiryModeSelect.value);
+        formData.append(
+          "expiresInHours",
+          document.getElementById("expiresInHours").value,
+        );
+        formData.append(
+          "maxDownloads",
+          document.getElementById("maxDownloads").value,
+        );
+
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = "Subiendo y fragmentando...";
+
+        try {
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json();
+
+          if (res.ok && data.success) {
+            uploadPlaceholder.classList.add("hidden");
+            uploadResult.classList.remove("hidden");
+            generatedLink.value = `${window.location.origin}/${data.slug}`;
+          } else {
+            alert(data.error || "Error al subir");
+          }
+        } catch (err) {
+          alert("Error de conexión");
+        } finally {
+          uploadBtn.disabled = false;
+          uploadBtn.textContent = "Subir y Generar URL";
+        }
+      });
+
+      copyBtn.addEventListener("click", () => {
+        generatedLink.select();
+        navigator.clipboard.writeText(generatedLink.value);
+        copyBtn.textContent = "¡Copiado!";
+        setTimeout(() => (copyBtn.textContent = "Copiar"), 2000);
+      });
+
+      async function loadFilesData() {
+        try {
+          const res = await fetch("/api/files");
+          const data = await res.json();
+
+          const usedMB = (data.storageUsed / (1024 * 1024)).toFixed(2);
+          const limitMB = (data.storageLimit / (1024 * 1024)).toFixed(0);
+          const percent = Math.min(
+            (data.storageUsed / data.storageLimit) * 100,
+            100,
+          ).toFixed(1);
+
+          document.getElementById("storageText").textContent =
+            `${usedMB} MB / ${limitMB} MB (${percent}%)`;
+          document.getElementById("storageBar").style.width = `${percent}%`;
+
+          const tbody = document.getElementById("filesTableBody");
+          if (data.files.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500">No hay archivos subidos aún.</td></tr>`;
+            return;
+          }
+
+          tbody.innerHTML = data.files
+            .map((f) => {
+              const sizeMB = (f.totalSize / (1024 * 1024)).toFixed(2) + " MB";
+              let policyText = "Permanente";
+              if (f.expiryMode === "time")
+                policyText = `Tiempo: ${new Date(f.expiresAt).toLocaleTimeString()}`;
+              if (f.expiryMode === "downloads")
+                policyText = `Máx: ${f.maxDownloads} descargas`;
+              if (f.expiryMode === "both")
+                policyText = `Tiempo y Máx: ${f.maxDownloads}`;
+
+              return `
+                        <tr class="hover:bg-slate-800/40 transition-all">
+                            <td class="p-3 font-medium text-slate-200">${f.originalName}</td>
+                            <td class="p-3 font-mono text-brand-400"><a href="/${f.slug}" target="_blank" class="hover:underline">/${f.slug}</a></td>
+                            <td class="p-3 text-slate-400">${sizeMB}</td>
+                            <td class="p-3 text-slate-300">${f.currentDownloads} ${f.maxDownloads !== null ? "/ " + f.maxDownloads : ""}</td>
+                            <td class="p-3 text-slate-400">${policyText}</td>
+                            <td class="p-3 text-right">
+                                <button onclick="deleteFile('${f.slug}')" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded-lg border border-rose-500/20 transition-all">Eliminar</button>
+                            </td>
+                        </tr>
+                    `;
+            })
+            .join("");
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      async function deleteFile(slug) {
+        if (!confirm(`¿Estás seguro de eliminar el archivo /${slug}?`)) return;
+        try {
+          const res = await fetch(`/api/files/${slug}`, { method: "DELETE" });
+          if (res.ok) loadFilesData();
+          else alert("Error al eliminar");
+        } catch {
+          alert("Error de red");
+        }
+      }
+    </script>
+  </body>
+</html>
