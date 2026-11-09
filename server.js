@@ -186,6 +186,7 @@ app.delete('/api/files/:slug', async (req, res) => {
 });
 
 // 4. Ruta GET /:slug -> Vista previa interactiva
+// 4. Ruta GET /:slug -> Vista previa interactiva con barra de porcentaje en tiempo real
 app.get('/:slug', async (req, res, next) => {
   const { slug } = req.params;
   if (slug === 'api' || slug.includes('.')) return next();
@@ -195,7 +196,6 @@ app.get('/:slug', async (req, res, next) => {
     return res.status(404).send(renderErrorPage('Archivo no encontrado', 'El enlace que buscas no existe o fue eliminado.'));
   }
 
-  // Validaciones de expiración
   if (fileRecord.expiresAt && new Date() > new Date(fileRecord.expiresAt)) {
     return res.status(410).send(renderErrorPage('Archivo Expirado', 'Este archivo ha superado su tiempo límite de disponibilidad.'));
   }
@@ -211,24 +211,108 @@ app.get('/:slug', async (req, res, next) => {
 <html lang="es" class="dark">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Descargar ${fileRecord.originalName} - TransferMe</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; }
+    </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-6">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center space-y-6">
-        <div class="w-16 h-16 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto text-2xl">📦</div>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-slate-900/90 border border-slate-800/80 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl backdrop-blur-2xl text-center space-y-6">
+        <div class="w-16 h-16 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto text-2xl shadow-inner">📦</div>
         <div>
-            <h1 class="text-xl font-bold text-white break-words">${fileRecord.originalName}</h1>
+            <h1 class="text-base font-semibold text-white break-words">${fileRecord.originalName}</h1>
             <p class="text-xs text-slate-400 mt-1">Listo para descargar de forma segura</p>
         </div>
-        <div class="bg-slate-950/60 rounded-xl p-4 text-left space-y-2 text-xs text-slate-300 border border-slate-800">
+        
+        <div class="bg-slate-950/80 rounded-2xl p-4 text-left space-y-2 text-xs text-slate-300 border border-slate-800/80">
             <div class="flex justify-between"><span>Tamaño:</span> <span class="font-mono text-white">${sizeMB} MB</span></div>
             <div class="flex justify-between"><span>Descargas Restantes:</span> <span class="font-mono text-white">${remainingDownloads}</span></div>
         </div>
-        <a href="/api/download/${slug}" class="block w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg transition-all text-sm text-center">
+
+        <!-- Barra de progreso de descarga en tiempo real -->
+        <div id="downloadProgressBox" class="hidden space-y-2 text-left">
+            <div class="flex justify-between text-xs text-slate-400">
+                <span id="dlStatus" class="font-medium text-indigo-300">Descargando...</span>
+                <span id="dlPercent" class="font-mono text-indigo-400 font-bold">0%</span>
+            </div>
+            <div class="w-full bg-slate-950 rounded-full h-2.5 border border-slate-800 overflow-hidden">
+                <div id="dlBar" class="bg-indigo-600 h-full transition-all duration-75" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <button id="downloadBtn" onclick="startDownload('${slug}', '${encodeURIComponent(fileRecord.originalName)}')" class="block w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 active:scale-98 text-white font-medium rounded-2xl shadow-lg shadow-indigo-600/25 transition-all text-xs text-center">
             Descargar Archivo Ahora
-        </a>
+        </button>
     </div>
+
+    <script>
+        function startDownload(slug, filename) {
+            const btn = document.getElementById('downloadBtn');
+            const box = document.getElementById('downloadProgressBox');
+            const bar = document.getElementById('dlBar');
+            const percent = document.getElementById('dlPercent');
+            const status = document.getElementById('dlStatus');
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            box.classList.remove('hidden');
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', '/api/download/' + slug, true);
+            xhr.responseType = 'blob';
+
+            xhr.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const p = Math.round((event.loaded / event.total) * 100);
+                    bar.style.width = p + '%';
+                    percent.textContent = p + '%';
+                    
+                    if (p < 100) {
+                        status.textContent = 'Descargando partes... (' + p + '%)';
+                    } else {
+                        status.textContent = '¡Completado! Uniendo y guardando...';
+                    }
+                } else {
+                    status.textContent = 'Descargando archivo...';
+                }
+            };
+
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    const blob = xhr.response;
+                    const link = document.createElement('a');
+                    link.href = window.URL.createObjectURL(blob);
+                    link.download = decodeURIComponent(filename);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    status.textContent = '¡Descarga finalizada con éxito!';
+                    percent.textContent = '100%';
+                    bar.style.width = '100%';
+                    
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    btn.textContent = 'Descargar Nuevamente';
+                } else {
+                    alert('Error al descargar el archivo.');
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            };
+
+            xhr.onerror = () => {
+                alert('Error de red durante la descarga.');
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            };
+
+            xhr.send();
+        }
+    </script>
 </body>
 </html>`);
 });
