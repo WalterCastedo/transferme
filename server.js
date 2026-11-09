@@ -52,7 +52,55 @@ async function getAllFiles() {
   }
   return files.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
+// Función auxiliar para eliminar físicamente un archivo y sus partes de Supabase
+async function deletePhysicalFile(fileRecord) {
+  try {
+    const pathsToDelete = fileRecord.parts.map(p => `chunks/${p}`);
+    pathsToDelete.push(`metadata/${fileRecord.slug}.json`);
+    await supabase.storage.from(BUCKET_NAME).remove(pathsToDelete);
+  } catch (err) {
+    console.error(`Error borrando archivos físicos de ${fileRecord.slug}:`, err);
+  }
+}
 
+// Modificar la ruta de listado de archivos para limpiar automáticamente los vencidos hace más de 1 día
+app.get('/api/files', async (req, res) => {
+  try {
+    const files = await getAllFiles();
+    const now = new Date();
+    const validFiles = [];
+
+    for (const file of files) {
+      let shouldDelete = false;
+      const oneDayMs = 24 * 60 * 60 * 1000;
+
+      // Condición 1: Expiró por tiempo + 1 día extra
+      if (file.expiresAt && now > new Date(new Date(file.expiresAt).getTime() + oneDayMs)) {
+        shouldDelete = true;
+      }
+
+      // Condición 2: Se agotaron las descargas + 1 día extra desde su creación o última descarga
+      if (file.maxDownloads !== null && file.currentDownloads >= file.maxDownloads) {
+        // Si no tiene expiresAt, usamos un estimado o borramos 1 día después de completarse
+        const completedTime = file.completedAt ? new Date(file.completedAt).getTime() : new Date(file.createdAt).getTime();
+        if (now > new Date(completedTime + oneDayMs)) {
+          shouldDelete = true;
+        }
+      }
+
+      if (shouldDelete) {
+        await deletePhysicalFile(file);
+      } else {
+        validFiles.push(file);
+      }
+    }
+
+    const totalUsed = validFiles.reduce((acc, file) => acc + (file.totalSize || 0), 0);
+    res.json({ files: validFiles, storageUsed: totalUsed, storageLimit: MAX_STORAGE_LIMIT });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 async function getFileBySlug(slug) {
   try {
     const { data, error } = await supabase.storage.from(BUCKET_NAME).download(`metadata/${slug}.json`);
@@ -185,7 +233,6 @@ app.delete('/api/files/:slug', async (req, res) => {
   }
 });
 
-// 4. Ruta GET /:slug -> Vista previa interactiva
 // 4. Ruta GET /:slug -> Vista previa interactiva con barra de porcentaje y tiempos/descargas restantes
 app.get('/:slug', async (req, res, next) => {
   const { slug } = req.params;
@@ -196,8 +243,26 @@ app.get('/:slug', async (req, res, next) => {
     return res.status(404).send(renderErrorPage('Archivo no encontrado', 'El enlace que buscas no existe o fue eliminado.'));
   }
 
-  // Validaciones de expiración
-  if (fileRecord.expiresAt && new Date() > new Date(fileRecord.expiresAt)) {
+  const now = new Date();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+
+  // Autodestrucción si pasó más de 1 día de su expiración por tiempo
+  if (fileRecord.expiresAt && now > new Date(new Date(fileRecord.expiresAt).getTime() + oneDayMs)) {
+    await deletePhysicalFile(fileRecord);
+    return res.status(410).send(renderErrorPage('Archivo Eliminado', 'Este archivo expiró y fue eliminado permanentemente.'));
+  }
+
+  // Autodestrucción si pasó más de 1 día desde que se completaron las descargas
+  if (fileRecord.maxDownloads !== null && fileRecord.currentDownloads >= fileRecord.maxDownloads) {
+    const limitTime = fileRecord.completedAt ? new Date(fileRecord.completedAt).getTime() : new Date(fileRecord.createdAt).getTime();
+    if (now > new Date(limitTime + oneDayMs)) {
+      await deletePhysicalFile(fileRecord);
+      return res.status(410).send(renderErrorPage('Archivo Eliminado', 'Se alcanzó el límite de descargas y el archivo fue eliminado permanentemente.'));
+    }
+  }
+
+  // Validaciones de expiración estándar
+  if (fileRecord.expiresAt && now > new Date(fileRecord.expiresAt)) {
     return res.status(410).send(renderErrorPage('Archivo Expirado', 'Este archivo ha superado su tiempo límite de disponibilidad.'));
   }
 
@@ -210,7 +275,7 @@ app.get('/:slug', async (req, res, next) => {
   // Calcular tiempo restante si aplica
   let remainingTimeText = null;
   if (fileRecord.expiresAt) {
-    const diffMs = new Date(fileRecord.expiresAt) - new Date();
+    const diffMs = new Date(fileRecord.expiresAt) - now;
     if (diffMs > 0) {
       const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
       const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -241,7 +306,7 @@ app.get('/:slug', async (req, res, next) => {
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
     <div class="bg-slate-900/90 border border-slate-800/80 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl backdrop-blur-2xl text-center space-y-6">
-        <div class="w-16 h-16 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto text-2xl shadow-inner">📦</div>
+        <div class="w-14 h-14 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto text-sm font-bold tracking-wider">FILE</div>
         <div>
             <h1 class="text-base font-semibold text-white break-words">${fileRecord.originalName}</h1>
             <p class="text-xs text-slate-400 mt-1">Listo para descargar de forma segura</p>
@@ -293,9 +358,9 @@ app.get('/:slug', async (req, res, next) => {
                     percent.textContent = p + '%';
                     
                     if (p < 100) {
-                        status.textContent = 'Descargando partes... (' + p + '%)';
+                        status.textContent = 'Descargando... (' + p + '%)';
                     } else {
-                        status.textContent = '¡Completado! Uniendo y guardando...';
+                        status.textContent = 'Uniendo y guardando...';
                     }
                 } else {
                     status.textContent = 'Descargando archivo...';
@@ -312,7 +377,7 @@ app.get('/:slug', async (req, res, next) => {
                     link.click();
                     document.body.removeChild(link);
 
-                    status.textContent = '¡Descarga finalizada con éxito!';
+                    status.textContent = 'Descarga finalizada';
                     percent.textContent = '100%';
                     bar.style.width = '100%';
                     
@@ -338,7 +403,6 @@ app.get('/:slug', async (req, res, next) => {
 </body>
 </html>`);
 });
-
 // 5. Descarga real
 app.get('/api/download/:slug', async (req, res) => {
   try {
@@ -350,13 +414,13 @@ app.get('/api/download/:slug', async (req, res) => {
     if (fileRecord.expiresAt && new Date() > new Date(fileRecord.expiresAt)) {
       return res.status(410).send('Archivo expirado');
     }
+
+    // Validar límite antes de iniciar
     if (fileRecord.maxDownloads !== null && fileRecord.currentDownloads >= fileRecord.maxDownloads) {
       return res.status(410).send('Límite de descargas alcanzado');
     }
 
-    fileRecord.currentDownloads += 1;
-    await saveFileMetadata(fileRecord);
-
+    // Descargar y unir todas las partes desde Supabase Storage
     const buffers = [];
     for (const partName of fileRecord.parts) {
       const { data: partData, error: partError } = await supabase.storage
@@ -368,17 +432,106 @@ app.get('/api/download/:slug', async (req, res) => {
     }
 
     const completeBuffer = Buffer.concat(buffers);
+    const totalSize = completeBuffer.length;
+    const range = req.headers.range;
 
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileRecord.originalName)}"`);
-    res.setHeader('Content-Type', 'application/octet-stream');
-    res.send(completeBuffer);
+    let isCompleteDownload = false;
+
+    // Soportar peticiones de rango (HTTP Range) para pausar y reanudar
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+
+      if (start >= totalSize) {
+        res.status(416).setHeader('Content-Range', `bytes */${totalSize}`).send('Requested Range Not Satisfiable');
+        return;
+      }
+
+      const chunksize = (end - start) + 1;
+      const slicedBuffer = completeBuffer.subarray(start, end + 1);
+
+      // Si el rango llega hasta el final del archivo, se considera descarga completa
+      if (end >= totalSize - 1) {
+        isCompleteDownload = true;
+      }
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(fileRecord.originalName)}"`
+      });
+      res.end(slicedBuffer);
+    } else {
+      isCompleteDownload = true;
+      res.writeHead(200, {
+        'Content-Length': totalSize,
+        'Accept-Ranges': 'bytes',
+        'Content-Type': 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(fileRecord.originalName)}"`
+      });
+      res.end(completeBuffer);
+    }
+
+    // Incrementar el contador de descargas ÚNICAMENTE cuando la respuesta finaliza con éxito y llega al final
+    res.on('finish', async () => {
+      if (isCompleteDownload && res.statusCode < 400) {
+        try {
+          const currentRecord = await getFileBySlug(slug);
+          if (currentRecord) {
+            currentRecord.currentDownloads += 1;
+            // Si con esta descarga se alcanza el límite, guardamos la marca de tiempo exacta
+            if (currentRecord.maxDownloads !== null && currentRecord.currentDownloads >= currentRecord.maxDownloads) {
+              currentRecord.completedAt = new Date().toISOString();
+            }
+            await saveFileMetadata(currentRecord);
+          }
+        } catch (err) {
+          console.error('Error actualizando contador:', err);
+        }
+      }
+    });
 
   } catch (err) {
     console.error(err);
-    res.status(500).send('Error interno');
+    if (!res.headersSent) res.status(500).send('Error interno');
   }
 });
+// API: Editar política de tiempo o descargas de un archivo existente
+app.put('/api/files/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { expiryMode, maxDownloads, expiresInHours } = req.body;
+    
+    const fileRecord = await getFileBySlug(slug);
+    if (!fileRecord) return res.status(404).json({ error: 'Archivo no encontrado' });
 
+    fileRecord.expiryMode = expiryMode;
+    
+    // Actualizar límite de descargas
+    if (expiryMode === 'downloads' || expiryMode === 'both') {
+      fileRecord.maxDownloads = maxDownloads !== null && maxDownloads !== '' ? parseInt(maxDownloads) : null;
+    } else {
+      fileRecord.maxDownloads = null;
+    }
+
+    // Actualizar tiempo de expiración (calculando nuevas horas desde el momento actual)
+    if (expiryMode === 'time' || expiryMode === 'both') {
+      const hours = parseFloat(expiresInHours) || 24;
+      fileRecord.expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    } else {
+      fileRecord.expiresAt = null;
+    }
+
+    await saveFileMetadata(fileRecord);
+    res.json({ success: true, message: 'Archivo actualizado correctamente' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 function renderErrorPage(title, message) {
   return `<!DOCTYPE html>
 <html lang="es" class="dark">

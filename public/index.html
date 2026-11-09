@@ -312,7 +312,7 @@
       </div>
     </main>
 
-    <!-- Modal de Progreso de Descarga Global -->
+    <!-- Modal de Progreso de Descarga -->
     <div
       id="downloadModal"
       class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4"
@@ -323,7 +323,6 @@
         <h4 class="text-sm font-semibold text-white" id="modalFileName">
           Descargando archivo...
         </h4>
-
         <div class="space-y-1.5 text-left">
           <div class="flex justify-between text-xs text-slate-400">
             <span id="modalStatus">Uniendo partes...</span>
@@ -348,7 +347,79 @@
       </div>
     </div>
 
-    <!-- Firma personalizada solicitada -->
+    <!-- Modal de Edición de Archivo -->
+    <div
+      id="editModal"
+      class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4"
+    >
+      <div
+        class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl"
+      >
+        <h4 class="text-sm font-semibold text-white text-center">
+          Editar Política del Archivo
+        </h4>
+        <input type="hidden" id="editSlug" />
+
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1"
+              >Nueva Política</label
+            >
+            <select
+              id="editExpiryMode"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none"
+            >
+              <option value="permanent">Permanente (Sin límite)</option>
+              <option value="time">Por Tiempo (Horas)</option>
+              <option value="downloads">Por Cantidad de Descargas</option>
+              <option value="both">Por Tiempo y Cantidad</option>
+            </select>
+          </div>
+
+          <div id="editTimeField" class="hidden">
+            <label class="block text-xs font-medium text-slate-400 mb-1"
+              >Nuevas Horas de Vida</label
+            >
+            <input
+              type="number"
+              id="editExpiresInHours"
+              value="24"
+              min="1"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none"
+            />
+          </div>
+
+          <div id="editDownloadsField" class="hidden">
+            <label class="block text-xs font-medium text-slate-400 mb-1"
+              >Nuevo Límite de Descargas</label
+            >
+            <input
+              type="number"
+              id="editMaxDownloads"
+              value="5"
+              min="1"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none"
+            />
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button
+            onclick="closeEditModal()"
+            class="w-1/2 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-medium transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onclick="saveEditedFile()"
+            class="w-1/2 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-medium transition-all"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+
     <footer
       class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500"
     >
@@ -368,17 +439,26 @@
       const timeField = document.getElementById("timeField");
       const downloadsField = document.getElementById("downloadsField");
 
-      const uploadProgressContainer = document.getElementById(
-        "uploadProgressContainer",
-      );
-      const progressBar = document.getElementById("progressBar");
-      const progressPercent = document.getElementById("progressPercent");
-      const progressStatusText = document.getElementById("progressStatusText");
+      const editExpiryMode = document.getElementById("editExpiryMode");
+      const editTimeField = document.getElementById("editTimeField");
+      const editDownloadsField = document.getElementById("editDownloadsField");
 
       expiryModeSelect.addEventListener("change", (e) => {
         const val = e.target.value;
         timeField.classList.toggle("hidden", val !== "time" && val !== "both");
         downloadsField.classList.toggle(
+          "hidden",
+          val !== "downloads" && val !== "both",
+        );
+      });
+
+      editExpiryMode.addEventListener("change", (e) => {
+        const val = e.target.value;
+        editTimeField.classList.toggle(
+          "hidden",
+          val !== "time" && val !== "both",
+        );
+        editDownloadsField.classList.toggle(
           "hidden",
           val !== "downloads" && val !== "both",
         );
@@ -428,10 +508,9 @@
         );
 
         uploadBtn.disabled = true;
-        uploadProgressContainer.classList.remove("hidden");
-        progressBar.style.width = "0%";
-        progressPercent.textContent = "0%";
-        progressStatusText.textContent = "Subiendo y fragmentando...";
+        document
+          .getElementById("uploadProgressContainer")
+          .classList.remove("hidden");
 
         const xhr = new XMLHttpRequest();
         xhr.open("POST", "/api/upload", true);
@@ -441,16 +520,18 @@
             const percentComplete = Math.round(
               (event.loaded / event.total) * 100,
             );
-            progressBar.style.width = percentComplete + "%";
-            progressPercent.textContent = percentComplete + "%";
-            if (percentComplete === 100)
-              progressStatusText.textContent = "Procesando en servidor...";
+            document.getElementById("progressBar").style.width =
+              percentComplete + "%";
+            document.getElementById("progressPercent").textContent =
+              percentComplete + "%";
           }
         };
 
         xhr.onload = () => {
           uploadBtn.disabled = false;
-          uploadProgressContainer.classList.add("hidden");
+          document
+            .getElementById("uploadProgressContainer")
+            .classList.add("hidden");
           try {
             const data = JSON.parse(xhr.responseText);
             if (xhr.status === 200 && data.success) {
@@ -461,17 +542,10 @@
               alert(data.error || "Error al subir");
             }
           } catch {
-            alert("Error en la respuesta del servidor");
+            alert("Error en servidor");
           }
         };
-
-        xhr.onerror = () => {
-          uploadBtn.disabled = false;
-          uploadProgressContainer.classList.add("hidden");
-          alert("Error de red.");
-        };
-
-        xhr.send();
+        xhr.send(formData);
       });
 
       copyBtn.addEventListener("click", () => {
@@ -541,7 +615,8 @@
                             <td class="p-3 text-slate-400">${sizeMB}</td>
                             <td class="p-3 text-slate-300">${f.currentDownloads} ${f.maxDownloads !== null ? "/ " + f.maxDownloads : ""}</td>
                             <td class="p-3 text-slate-400">${policyText}</td>
-                            <td class="p-3 text-right">
+                            <td class="p-3 text-right space-x-1">
+                                <button onclick="openEditModal('${f.slug}', '${f.expiryMode || "permanent"}', '${f.maxDownloads || ""}')" class="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-2.5 py-1 rounded-xl border border-indigo-500/20 transition-all active:scale-95">Editar</button>
                                 <button onclick="deleteFile('${f.slug}')" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded-xl border border-rose-500/20 transition-all active:scale-95">Eliminar</button>
                             </td>
                         </tr>
@@ -550,6 +625,51 @@
             .join("");
         } catch (err) {
           console.error(err);
+        }
+      }
+
+      function openEditModal(slug, mode, maxDownloads) {
+        document.getElementById("editSlug").value = slug;
+        editExpiryMode.value = mode;
+        editTimeField.classList.toggle(
+          "hidden",
+          mode !== "time" && mode !== "both",
+        );
+        editDownloadsField.classList.toggle(
+          "hidden",
+          mode !== "downloads" && mode !== "both",
+        );
+        if (maxDownloads)
+          document.getElementById("editMaxDownloads").value = maxDownloads;
+        document.getElementById("editModal").classList.remove("hidden");
+      }
+
+      function closeEditModal() {
+        document.getElementById("editModal").classList.add("hidden");
+      }
+
+      async function saveEditedFile() {
+        const slug = document.getElementById("editSlug").value;
+        const expiryMode = editExpiryMode.value;
+        const maxDownloads = document.getElementById("editMaxDownloads").value;
+        const expiresInHours =
+          document.getElementById("editExpiresInHours").value;
+
+        try {
+          const res = await fetch(`/api/files/${slug}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ expiryMode, maxDownloads, expiresInHours }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            closeEditModal();
+            loadFilesData();
+          } else {
+            alert(data.error || "Error al actualizar");
+          }
+        } catch {
+          alert("Error de red");
         }
       }
 
@@ -598,12 +718,6 @@
             closeDownloadModal();
           }
         };
-
-        xhr.onerror = () => {
-          alert("Error de red.");
-          closeDownloadModal();
-        };
-
         xhr.send();
       }
 
