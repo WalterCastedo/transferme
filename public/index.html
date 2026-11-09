@@ -6,7 +6,6 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <!-- Meta tags para simular App nativa de iOS en móviles -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta
       name="apple-mobile-web-app-status-bar-style"
@@ -33,7 +32,6 @@
       };
     </script>
     <style>
-      /* Estilos estilo iOS nativo */
       body {
         font-family:
           -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons",
@@ -43,16 +41,15 @@
       input,
       select,
       button {
-        font-size: 16px !important; /* Evita el zoom automático de Safari en iOS al enfocar */
+        font-size: 16px !important;
       }
     </style>
   </head>
   <body
     class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-brand-500 selection:text-white pb-6 md:pb-0"
   >
-    <!-- Header / Navbar estilo barra superior de iOS -->
     <header
-      class="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-50 pt-safe"
+      class="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-50"
     >
       <div
         class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between"
@@ -101,7 +98,6 @@
       </div>
     </header>
 
-    <!-- Main Container -->
     <main class="max-w-4xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full">
       <!-- SECCIÓN 1: SUBIR -->
       <div
@@ -186,7 +182,6 @@
               />
             </div>
 
-            <!-- Barra de Progreso de Subida -->
             <div id="uploadProgressContainer" class="hidden space-y-1.5 pt-1">
               <div class="flex justify-between text-xs text-slate-400">
                 <span id="progressStatusText">Subiendo...</span>
@@ -220,11 +215,11 @@
         >
           <div id="uploadResult" class="hidden text-center space-y-4">
             <div
-              class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto text-xl"
+              class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto text-sm font-bold"
             >
-              ✓
+              OK
             </div>
-            <h3 class="text-sm font-semibold text-white">¡Archivo listo!</h3>
+            <h3 class="text-sm font-semibold text-white">Archivo listo</h3>
             <p class="text-xs text-slate-400">
               Comparte este enlace de vista previa:
             </p>
@@ -300,12 +295,13 @@
                   <th class="p-3">Enlace Directo</th>
                   <th class="p-3">Tamaño</th>
                   <th class="p-3">Descargas</th>
+                  <th class="p-3">Política</th>
                   <th class="p-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody id="filesTableBody" class="divide-y divide-slate-800/50">
                 <tr>
-                  <td colspan="5" class="p-6 text-center text-slate-500">
+                  <td colspan="6" class="p-6 text-center text-slate-500">
                     Cargando archivos...
                   </td>
                 </tr>
@@ -316,7 +312,7 @@
       </div>
     </main>
 
-    <!-- Modal de Progreso de Descarga Global (Para la tabla) -->
+    <!-- Modal de Progreso de Descarga Global -->
     <div
       id="downloadModal"
       class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4"
@@ -324,11 +320,6 @@
       <div
         class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl text-center"
       >
-        <div
-          class="w-12 h-12 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto text-xl"
-        >
-          📥
-        </div>
         <h4 class="text-sm font-semibold text-white" id="modalFileName">
           Descargando archivo...
         </h4>
@@ -357,10 +348,11 @@
       </div>
     </div>
 
+    <!-- Firma personalizada solicitada -->
     <footer
       class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500"
     >
-      TransferMe Engine &bull; iOS Optimized
+      Hecho por Walter J. Castedo S.
     </footer>
 
     <script>
@@ -479,13 +471,13 @@
           alert("Error de red.");
         };
 
-        xhr.send(formData);
+        xhr.send();
       });
 
       copyBtn.addEventListener("click", () => {
         generatedLink.select();
         navigator.clipboard.writeText(generatedLink.value);
-        copyBtn.textContent = "¡Copiado!";
+        copyBtn.textContent = "Copiado";
         setTimeout(() => (copyBtn.textContent = "Copiar"), 2000);
       });
 
@@ -507,7 +499,7 @@
 
           const tbody = document.getElementById("filesTableBody");
           if (data.files.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500">No hay archivos subidos aún.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500">No hay archivos subidos aún.</td></tr>`;
             return;
           }
 
@@ -515,10 +507,7 @@
             .map((f) => {
               const sizeMB = (f.totalSize / (1024 * 1024)).toFixed(2) + " MB";
 
-              // Calcular política y tiempo restante detallado para la tabla
-              let policyText =
-                '<span class="text-emerald-400">Permanente</span>';
-
+              let policyText = "Permanente";
               if (f.expiryMode === "time" || f.expiryMode === "both") {
                 if (f.expiresAt) {
                   const diffMs = new Date(f.expiresAt) - new Date();
@@ -527,19 +516,18 @@
                     const diffMins = Math.floor(
                       (diffMs % (1000 * 60 * 60)) / (1000 * 60),
                     );
-                    policyText = `⏱️ Expira en ${diffHours}h ${diffMins}m`;
+                    policyText = `Expira: ${diffHours}h ${diffMins}m`;
                   } else {
-                    policyText = '<span class="text-rose-400">Expirado</span>';
+                    policyText = "Expirado";
                   }
                 }
               }
-
               if (f.expiryMode === "downloads" || f.expiryMode === "both") {
                 const left =
                   f.maxDownloads !== null
                     ? f.maxDownloads - f.currentDownloads
                     : "∞";
-                const dlText = `📥 Quedan ${left}/${f.maxDownloads}`;
+                const dlText = `Quedan ${left}/${f.maxDownloads}`;
                 policyText =
                   f.expiryMode === "both"
                     ? `${policyText} | ${dlText}`
@@ -565,7 +553,6 @@
         }
       }
 
-      // Descarga con barra de progreso desde la tabla de gestión
       function downloadWithProgress(slug, encodedName) {
         const filename = decodeURIComponent(encodedName);
         const modal = document.getElementById("downloadModal");
@@ -603,7 +590,7 @@
             link.click();
             document.body.removeChild(link);
 
-            modalStatus.textContent = "¡Descarga completa!";
+            modalStatus.textContent = "Descarga completa";
             setTimeout(() => closeDownloadModal(), 1500);
             loadFilesData();
           } else {
